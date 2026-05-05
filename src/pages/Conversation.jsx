@@ -9,11 +9,9 @@ import {
   Send,
 } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
-import axios from "axios";
+import api from "../utils/api";
 import useAuthStore from "../store/authStore";
-import { createEncryptedPayload } from "../utils/crypto";
-
-const apiBaseUrl = "https://whisperbox.koyeb.app";
+import { createEncryptedPayload, decryptMessagePayload } from "../utils/crypto";
 
 function formatTime(timestamp) {
   if (!timestamp) return "";
@@ -37,7 +35,9 @@ const Header = ({ recipientName, active, onBack }) => (
       </div>
       <div>
         <h3 className="font-semibold">{recipientName || "Chat"}</h3>
-        <p className="text-xs text-green-500">{active ? "Active now" : "Offline"}</p>
+        <p className="text-xs text-green-500">
+          {active ? "Active now" : "Offline"}
+        </p>
       </div>
     </div>
 
@@ -103,6 +103,7 @@ const ChatPage = () => {
   const navigate = useNavigate();
   const token = useAuthStore((state) => state.access_token);
   const currentUserId = useAuthStore((state) => state.user?.id);
+  const privateKey = useAuthStore((state) => state.privateKey);
   const [recipientName, setRecipientName] = useState("");
   const [recipientKey, setRecipientKey] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -110,6 +111,7 @@ const ChatPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [wsError, setWsError] = useState(null);
   const [sending, setSending] = useState(false);
   const socketRef = useRef(null);
 
@@ -123,36 +125,49 @@ const ChatPage = () => {
         setError(null);
 
         const [messagesRes, publicKeyRes] = await Promise.all([
-          axios.get(`${apiBaseUrl}/conversations/${recipientId}/messages`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+          api.get(`/conversations/${recipientId}/messages`, {
             params: {
               limit: 50,
             },
           }),
-          axios.get(`${apiBaseUrl}/users/${recipientId}/public-key`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }),
+          api.get(`/users/${recipientId}/public-key`),
         ]);
 
         if (!isMounted) return;
 
         const normalized = Array.isArray(messagesRes.data)
-          ? messagesRes.data
-              .slice()
-              .reverse()
-              .map((message) => ({
-                id: message.id,
-                sender: message.from_user_id === currentUserId ? "me" : "other",
-                text: message.payload?.ciphertext
-                  ? "Encrypted message"
-                  : "Encrypted content",
-                time: formatTime(message.created_at),
-                payload: message.payload,
-              }))
+          ? await Promise.all(
+              messagesRes.data
+                .slice()
+                .reverse()
+                .map(async (message) => {
+                  let messageText = message.payload?.ciphertext
+                    ? "Encrypted message"
+                    : "Encrypted content";
+
+                  if (privateKey && message.payload?.ciphertext) {
+                    try {
+                      messageText = await decryptMessagePayload(
+                        message.payload,
+                        privateKey,
+                      );
+                    } catch (decryptError) {
+                      console.warn(
+                        "Unable to decrypt chat history message:",
+                        decryptError,
+                      );
+                    }
+                  }
+
+                  return {
+                    id: message.id,
+                    sender: message.from_user_id === currentUserId ? "me" : "other",
+                    text: messageText,
+                    time: formatTime(message.created_at),
+                    payload: message.payload,
+                  };
+                }),
+            )
           : [];
 
         setMessages(normalized);
@@ -161,8 +176,8 @@ const ChatPage = () => {
         const message = err.response
           ? JSON.stringify(err.response.data)
           : err.request
-          ? "No response from server."
-          : err.message;
+            ? "No response from server."
+            : err.message;
         if (isMounted) {
           setError(message);
         }
@@ -178,34 +193,48 @@ const ChatPage = () => {
     return () => {
       isMounted = false;
     };
-  }, [recipientId, token, currentUserId]);
+  }, [recipientId, token, currentUserId, privateKey]);
 
   useEffect(() => {
     if (!token) return;
 
-    const socket = new WebSocket(`wss://whisperbox.koyeb.app/ws?token=${token}`);
+    const socket = new WebSocket(
+      `wss://whisperbox.koyeb.app/ws?token=${token}`,
+    );
     socketRef.current = socket;
 
     socket.onopen = () => {
       setWsConnected(true);
+      setWsError(null);
     };
 
-    socket.onmessage = (event) => {
+    socket.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
         if (data.event === "message.receive") {
           const isRelevant =
-            data.from_user_id === recipientId || data.to_user_id === recipientId;
+            data.from_user_id === recipientId ||
+            data.to_user_id === recipientId;
           if (!isRelevant) return;
+
+          let messageText = data.payload?.ciphertext
+            ? "Encrypted message"
+            : "Encrypted content";
+
+          if (privateKey && data.payload?.ciphertext) {
+            try {
+              messageText = await decryptMessagePayload(data.payload, privateKey);
+            } catch (decryptError) {
+              console.warn("Unable to decrypt incoming WebSocket message:", decryptError);
+            }
+          }
 
           setMessages((prev) => [
             ...prev,
             {
               id: data.id,
               sender: data.from_user_id === currentUserId ? "me" : "other",
-              text: data.payload?.ciphertext
-                ? "Encrypted message"
-                : "Encrypted content",
+              text: messageText,
               time: formatTime(data.created_at),
               payload: data.payload,
             },
@@ -217,55 +246,60 @@ const ChatPage = () => {
     };
 
     socket.onerror = () => {
-      setError("WebSocket connection error.");
+      setWsConnected(false);
+      setWsError("WebSocket unavailable; outgoing messages will use fallback POST.");
     };
 
     socket.onclose = () => {
       setWsConnected(false);
+      setWsError("WebSocket unavailable; outgoing messages will use fallback POST.");
     };
 
     return () => {
       socket.close();
       socketRef.current = null;
     };
-  }, [recipientId, token, currentUserId]);
+  }, [recipientId, token, currentUserId, privateKey]);
 
   const sendMessage = async () => {
     if (!input.trim() || !recipientKey) return;
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      setError("Chat connection is not open yet.");
-      return;
-    }
+    setSending(true);
+    setError(null);
 
     try {
-      setSending(true);
-      setError(null);
       const payload = await createEncryptedPayload(input.trim(), recipientKey);
-      const event = {
-        event: "message.send",
-        to: recipientId,
+      const localMessage = {
+        id: `local-${Date.now()}`,
+        sender: "me",
+        text: input.trim(),
+        time: formatTime(new Date().toISOString()),
         payload,
+        pending: true,
       };
 
-      socketRef.current.send(JSON.stringify(event));
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `local-${Date.now()}`,
-          sender: "me",
-          text: input.trim(),
-          time: formatTime(new Date().toISOString()),
+      setMessages((prev) => [...prev, localMessage]);
+
+      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+        const event = {
+          event: "message.send",
+          to: recipientId,
           payload,
-          pending: true,
-        },
-      ]);
+        };
+        socketRef.current.send(JSON.stringify(event));
+      } else {
+        await api.post("/messages", {
+          to: recipientId,
+          payload,
+        });
+      }
+
       setInput("");
     } catch (err) {
       const message = err.response
         ? JSON.stringify(err.response.data)
         : err.request
-        ? "No response from server."
-        : err.message;
+          ? "No response from server."
+          : err.message;
       setError(message);
     } finally {
       setSending(false);
@@ -284,19 +318,29 @@ const ChatPage = () => {
         {loading ? (
           <p className="text-center text-gray-500">Loading chat history…</p>
         ) : error ? (
-          <p className="text-center text-sm text-red-600 wrap-break-word">{error}</p>
+          <p className="text-center text-sm text-red-600 wrap-break-word">
+            {error}
+          </p>
         ) : messages.length === 0 ? (
-          <p className="text-center text-gray-500">No conversation history yet.</p>
+          <p className="text-center text-gray-500">
+            No conversation history yet.
+          </p>
         ) : (
           messages.map((msg) => <MessageBubble key={msg.id} msg={msg} />)
         )}
+
+        {wsError && !error ? (
+          <p className="mt-2 text-center text-sm text-yellow-600 wrap-break-word">
+            {wsError}
+          </p>
+        ) : null}
       </div>
 
       <InputBar
         message={input}
         setMessage={setInput}
         onSend={sendMessage}
-        disabled={sending || !wsConnected}
+        disabled={sending || !recipientKey}
       />
     </div>
   );

@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Search, User } from "lucide-react";
-import axios from "axios";
+import api from "../utils/api";
 import { useNavigate } from "react-router-dom";
 import ChatListItem from "../components/shared/ChatListItem";
 import useAuthStore from "../store/authStore";
-
-const apiBaseUrl = import.meta.env.DEV ? "" : "https://whisperbox.koyeb.app";
 
 function formatTime(timestamp) {
   if (!timestamp) return "";
@@ -70,6 +68,7 @@ function normalizeConversation(conversation) {
 }
 
 export default function ChatHome() {
+  
   const navigate = useNavigate();
   const token = useAuthStore((state) => state.access_token);
   const [conversations, setConversations] = useState([]);
@@ -85,11 +84,7 @@ export default function ChatHome() {
 
       try {
         setErrorMessage(null);
-        const response = await axios.get(`${apiBaseUrl}/conversations`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+        const response = await api.get("/conversations");
 
         let conversationList = [];
         if (Array.isArray(response.data)) {
@@ -129,11 +124,11 @@ export default function ChatHome() {
   return (
     <div className="bg-[#000E08] pt-5 min-h-screen">
       <div className="flex h-[15vh] justify-between items-center p-6 text-white">
-        <div className="border-2 border-[#363F3B] rounded-full w-11 h-11 flex items-center justify-center bg-[#363F3B]">
+        <div className="border-2 border-[#363F3B] rounded-full w-11 h-11 flex items-center justify-center bg-[#363F3B]" onClick={() => navigate("/search")}>
           <Search />
         </div>
         <p className="font-bold text-lg">Messages</p>
-        <div className="border-2 border-[#363F3B] rounded-full w-11 h-11 flex items-center justify-center bg-[#363F3B]">
+        <div className="border-2 border-[#363F3B] rounded-full w-11 h-11 flex items-center justify-center bg-[#363F3B]" onClick={() => navigate("/profile")}>
           <User />
         </div>
       </div>
@@ -156,7 +151,9 @@ export default function ChatHome() {
                 <ChatListItem
                   key={chat.id}
                   chat={chat}
-                  onClick={() => handleConversationClick(chat.targetId ?? chat.id)}
+                  onClick={() =>
+                    handleConversationClick(chat.targetId ?? chat.id)
+                  }
                 />
               ))}
             </ul>

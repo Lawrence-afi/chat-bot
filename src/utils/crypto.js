@@ -6,8 +6,10 @@ const b642buf = (b64) => {
   return Uint8Array.from(atob(b64), (char) => char.charCodeAt(0));
 };
 
+const decodeBase64 = (base64) => b642buf(base64);
+
 export async function importRsaPublicKey(publicKeyBase64) {
-  const keyData = b642buf(publicKeyBase64);
+  const keyData = decodeBase64(publicKeyBase64);
   return crypto.subtle.importKey(
     "spki",
     keyData,
@@ -17,6 +19,73 @@ export async function importRsaPublicKey(publicKeyBase64) {
     },
     false,
     ["encrypt"],
+  );
+}
+
+export async function importRsaPrivateKey(privateKeyBase64) {
+  const keyData = decodeBase64(privateKeyBase64);
+  return crypto.subtle.importKey(
+    "pkcs8",
+    keyData,
+    {
+      name: "RSA-OAEP",
+      hash: "SHA-256",
+    },
+    false,
+    ["decrypt"],
+  );
+}
+
+export async function deriveAesKeyFromPassword(password, saltBase64) {
+  const salt = decodeBase64(saltBase64);
+  const passwordKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"],
+  );
+
+  return crypto.subtle.deriveKey(
+    {
+      name: "PBKDF2",
+      salt,
+      iterations: 100000,
+      hash: "SHA-256",
+    },
+    passwordKey,
+    {
+      name: "AES-GCM",
+      length: 256,
+    },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+export async function decryptPrivateKey(password, wrappedPrivateKeyBase64, saltBase64, ivBase64) {
+  const encryptionKey = await deriveAesKeyFromPassword(password, saltBase64);
+  const encryptedPrivateKey = decodeBase64(wrappedPrivateKeyBase64);
+  const iv = decodeBase64(ivBase64);
+
+  const privateKeyRaw = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv,
+    },
+    encryptionKey,
+    encryptedPrivateKey,
+  );
+
+  return crypto.subtle.importKey(
+    "pkcs8",
+    privateKeyRaw,
+    {
+      name: "RSA-OAEP",
+      hash: "SHA-256",
+    },
+    false,
+    ["decrypt"],
   );
 }
 
@@ -50,6 +119,19 @@ export async function encryptAesGcm(key, plaintext) {
   return { ciphertext, iv };
 }
 
+export async function decryptAesGcm(key, ciphertext, iv) {
+  const plaintext = await crypto.subtle.decrypt(
+    {
+      name: "AES-GCM",
+      iv,
+    },
+    key,
+    ciphertext,
+  );
+
+  return new TextDecoder().decode(plaintext);
+}
+
 export async function rsaOaepEncrypt(publicKey, data) {
   return crypto.subtle.encrypt(
     {
@@ -58,6 +140,40 @@ export async function rsaOaepEncrypt(publicKey, data) {
     publicKey,
     data,
   );
+}
+
+export async function rsaOaepDecrypt(privateKey, data) {
+  return crypto.subtle.decrypt(
+    {
+      name: "RSA-OAEP",
+    },
+    privateKey,
+    data,
+  );
+}
+
+export async function decryptMessagePayload(payload, privateKey) {
+  if (!payload) {
+    throw new Error("Missing message payload");
+  }
+
+  const encryptedKeyForSelf = payload.encryptedKeyForSelf || payload.encryptedKey;
+  const encryptedKeyBytes = decodeBase64(encryptedKeyForSelf);
+  const rawAesKey = await rsaOaepDecrypt(privateKey, encryptedKeyBytes);
+
+  const aesKey = await crypto.subtle.importKey(
+    "raw",
+    rawAesKey,
+    {
+      name: "AES-GCM",
+    },
+    false,
+    ["decrypt"],
+  );
+
+  const ciphertext = decodeBase64(payload.ciphertext);
+  const iv = decodeBase64(payload.iv);
+  return decryptAesGcm(aesKey, ciphertext, iv);
 }
 
 export async function createEncryptedPayload(message, recipientPublicKeyBase64) {
@@ -144,5 +260,6 @@ export async function generateKeys(password) {
     wrapped_private_key: buf2b64(encryptedPrivateKey),
     pbkdf2_salt: buf2b64(salt),
     iv: buf2b64(iv),
+    privateKey: keyPair.privateKey,
   };
 }

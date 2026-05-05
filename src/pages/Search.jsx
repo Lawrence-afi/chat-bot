@@ -1,10 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
-import axios from "axios";
+import api from "../utils/api";
 import { useNavigate } from "react-router-dom";
 import useAuthStore from "../store/authStore";
-
-const apiBaseUrl = "https://whisperbox.koyeb.app";
 
 const Avatar = ({ src }) => (
   <div className="relative">
@@ -57,11 +55,7 @@ const SearchPage = () => {
       setError(null);
 
       try {
-        const response = await axios.get(`${apiBaseUrl}/users/search`, {
-          headers: {
-            Accept: "application/json",
-            Authorization: `Bearer ${token}`,
-          },
+        const response = await api.get("/users/search", {
           params: {
             q: query,
           },
@@ -72,8 +66,8 @@ const SearchPage = () => {
         const message = err.response
           ? JSON.stringify(err.response.data)
           : err.request
-          ? "No response from server."
-          : err.message;
+            ? "No response from server."
+            : err.message;
 
         setError(message);
         setResults([]);
@@ -117,13 +111,19 @@ const SearchPage = () => {
             <p className="text-sm text-red-600 wrap-break-word">{error}</p>
           ) : results.length === 0 ? (
             <p className="text-sm text-gray-500">
-              {query.trim() ? "No users found." : "Type a name to search users."}
+              {query.trim()
+                ? "No users found."
+                : "Type a name to search users."}
             </p>
           ) : (
             results.map((user) => (
               <ListItem
                 key={user.id}
-                avatar={user.display_name ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.display_name)}` : "https://ui-avatars.com/api/?name=U"}
+                avatar={
+                  user.display_name
+                    ? `https://ui-avatars.com/api/?name=${encodeURIComponent(user.display_name)}`
+                    : "https://ui-avatars.com/api/?name=U"
+                }
                 title={user.display_name || user.username}
                 subtitle={user.username}
                 onClick={() => navigate(`/conversation/${user.id}`)}

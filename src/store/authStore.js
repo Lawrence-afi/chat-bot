@@ -9,6 +9,7 @@ const useAuthStore = create(
       token_type: null,
       expires_in: null,
       user: null,
+      privateKey: null,
 
       hydrated: false,
 
@@ -23,6 +24,8 @@ const useAuthStore = create(
         });
       },
 
+      setPrivateKey: (key) => set({ privateKey: key }),
+
       // Logout
       logout: () => {
         set({
@@ -31,7 +34,47 @@ const useAuthStore = create(
           token_type: null,
           expires_in: null,
           user: null,
+          privateKey: null,
         });
+      },
+
+      // Refresh Access Token
+      refreshAccessToken: async () => {
+        const { refresh_token, logout } = get();
+        
+        if (!refresh_token) {
+          logout();
+          return false;
+        }
+
+        try {
+          const response = await fetch("https://whisperbox.koyeb.app/auth/refresh", {
+            method: "POST",
+            headers: {
+              "Accept": "application/json",
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ refresh_token }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Failed to refresh token");
+          }
+
+          const data = await response.json();
+          
+          set({
+            access_token: data.access_token,
+            token_type: data.token_type,
+            expires_in: data.expires_in,
+          });
+          
+          return true;
+        } catch (error) {
+          console.error("Error refreshing token:", error);
+          logout();
+          return false;
+        }
       },
 
       // Check if user is logged in

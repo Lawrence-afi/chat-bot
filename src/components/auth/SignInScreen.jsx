@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import AuthHeader from "./AuthHeader";
 import InputField from "./InputField";
 import { useForm } from "react-hook-form";
-import axios from "axios";
+import api from "../../utils/api";
+import { decryptPrivateKey } from "../../utils/crypto";
 import useAuthStore from "../../store/authStore";
 import { useNavigate } from "react-router-dom";
 
@@ -11,6 +12,7 @@ const SignInScreen = () => {
   const [errorMessage, setErrorMessage] = useState(null);
 
   const setAuth = useAuthStore((state) => state.setAuth);
+  const setPrivateKey = useAuthStore((state) => state.setPrivateKey);
   const navigate = useNavigate();
 
   const {
@@ -30,11 +32,7 @@ const SignInScreen = () => {
     setLoading(true);
 
     try {
-      const apiBaseUrl = import.meta.env.DEV
-        ? ""
-        : "https://whisperbox.koyeb.app";
-
-      const res = await axios.post(`${apiBaseUrl}/auth/login`, {
+      const res = await api.post("/auth/login", {
         username: data.username,
         password: data.password,
       });
@@ -54,6 +52,25 @@ const SignInScreen = () => {
         expires_in: Date.now() + response.expires_in * 1000,
         user: response.user,
       });
+
+      // Decrypt and cache the private key if available
+      if (
+        response.user?.wrapped_private_key &&
+        response.user?.pbkdf2_salt &&
+        response.user?.iv
+      ) {
+        try {
+          const privateKey = await decryptPrivateKey(
+            data.password,
+            response.user.wrapped_private_key,
+            response.user.pbkdf2_salt,
+            response.user.iv,
+          );
+          setPrivateKey(privateKey);
+        } catch (keyError) {
+          console.warn("Unable to decrypt private key:", keyError);
+        }
+      }
 
       console.log("Login successful:", response.user.username);
 

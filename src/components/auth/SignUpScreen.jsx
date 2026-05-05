@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import AuthHeader from "./AuthHeader";
 import InputField from "./InputField";
 import { useForm } from "react-hook-form";
-import axios from "axios";
+import api from "../../utils/api";
 import { generateKeys } from "../../utils/crypto";
 import useAuthStore from "../../store/authStore";
 import { useNavigate } from "react-router-dom";
@@ -12,6 +12,7 @@ const SignUpScreen = () => {
   const [errorMessage, setErrorMessage] = useState(null);
 
   const setAuth = useAuthStore((state) => state.setAuth);
+  const setPrivateKey = useAuthStore((state) => state.setPrivateKey);
   const navigate = useNavigate();
 
   const {
@@ -39,11 +40,7 @@ const SignUpScreen = () => {
       // 🔐 Generate E2EE keys
       const secrets = await generateKeys(data.password);
 
-      const apiBaseUrl = import.meta.env.DEV
-        ? ""
-        : "https://whisperbox.koyeb.app";
-
-      const res = await axios.post(`${apiBaseUrl}/auth/register`, {
+      const res = await api.post("/auth/register", {
         username: data.username,
         display_name: data.name,
         password: data.password,
@@ -65,6 +62,11 @@ const SignUpScreen = () => {
         expires_in: Date.now() + response.expires_in * 1000,
         user: response.user,
       });
+
+      // Keep private key in memory so we can decrypt incoming messages
+      if (secrets.privateKey) {
+        setPrivateKey(secrets.privateKey);
+      }
 
       console.log("Signup successful:", response.user.username);
 
