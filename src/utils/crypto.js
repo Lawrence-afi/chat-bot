@@ -63,7 +63,12 @@ export async function deriveAesKeyFromPassword(password, saltBase64) {
   );
 }
 
-export async function decryptPrivateKey(password, wrappedPrivateKeyBase64, saltBase64, ivBase64) {
+export async function decryptPrivateKey(
+  password,
+  wrappedPrivateKeyBase64,
+  saltBase64,
+  ivBase64,
+) {
   const encryptionKey = await deriveAesKeyFromPassword(password, saltBase64);
   const encryptedPrivateKey = decodeBase64(wrappedPrivateKeyBase64);
   const iv = decodeBase64(ivBase64);
@@ -157,7 +162,8 @@ export async function decryptMessagePayload(payload, privateKey) {
     throw new Error("Missing message payload");
   }
 
-  const encryptedKeyForSelf = payload.encryptedKeyForSelf || payload.encryptedKey;
+  const encryptedKeyForSelf =
+    payload.encryptedKeyForSelf || payload.encryptedKey;
   const encryptedKeyBytes = decodeBase64(encryptedKeyForSelf);
   const rawAesKey = await rsaOaepDecrypt(privateKey, encryptedKeyBytes);
 
@@ -176,7 +182,10 @@ export async function decryptMessagePayload(payload, privateKey) {
   return decryptAesGcm(aesKey, ciphertext, iv);
 }
 
-export async function createEncryptedPayload(message, recipientPublicKeyBase64) {
+export async function createEncryptedPayload(
+  message,
+  recipientPublicKeyBase64,
+) {
   const recipientKey = await importRsaPublicKey(recipientPublicKeyBase64);
   const aesKey = await generateAesKey();
   const { ciphertext, iv } = await encryptAesGcm(aesKey, message);

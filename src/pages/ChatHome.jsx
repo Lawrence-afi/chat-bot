@@ -42,27 +42,25 @@ function normalizeConversation(conversation) {
     conversation._id ||
     conversation.conversation_id;
 
+  const displayName =
+    conversation.display_name ||
+    conversation.name ||
+    conversation.title ||
+    conversation.subject ||
+    conversation.participants?.[0]?.display_name ||
+    conversation.participants?.[0]?.name ||
+    conversation.participants?.[0]?.username ||
+    "Unknown";
+
   return {
     id: userId,
     targetId: userId,
-    name:
-      conversation.name ||
-      conversation.title ||
-      conversation.subject ||
-      (conversation.participants?.length
-        ? conversation.participants[0].name ||
-          conversation.participants[0].username
-        : "Unknown"),
+    name: displayName,
     message: content,
     time: formatTime(rawTimestamp),
     sortTime: rawTimestamp ? new Date(rawTimestamp).getTime() : 0,
     unread: conversation.unread_count ?? conversation.unread ?? 0,
-    avatar:
-      conversation.avatar ||
-      conversation.image ||
-      conversation.participants?.[0]?.avatar ||
-      conversation.participants?.[0]?.name?.charAt(0)?.toUpperCase() ||
-      "U",
+    avatar: displayName.charAt(0).toUpperCase(),
     online: conversation.online ?? false,
   };
 }

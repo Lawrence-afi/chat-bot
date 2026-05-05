@@ -28,7 +28,14 @@ function App() {
           </ProtectedRoute>
         }
       />
-      <Route path="/conversation/:id" element={<ChatPage />} />
+      <Route
+        path="/conversation/:id"
+        element={
+          <ProtectedRoute>
+            <ChatPage />
+          </ProtectedRoute>
+        }
+      />
       <Route path="/signin" element={<SignInScreen />} />
       <Route path="/signup" element={<SignUpScreen />} />
     </Routes>

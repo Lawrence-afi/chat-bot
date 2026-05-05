@@ -20,16 +20,25 @@ export default function Avatar({
     lg: "w-16 h-16",
   };
 
+  const isInitial = typeof src === "string" && src.length === 1;
+  const initial = isInitial ? src.toUpperCase() : alt?.charAt(0)?.toUpperCase() || "U";
+
   return (
     <div className={`relative shrink-0 ${sizeClasses[size]}`}>
-      <img
-        src={src}
-        alt={alt}
-        className="rounded-full object-cover w-full h-full"
-      />
+      {isInitial ? (
+        <div className="rounded-full bg-[#24786D] text-white font-semibold flex items-center justify-center w-full h-full">
+          {initial}
+        </div>
+      ) : (
+        <img
+          src={src}
+          alt={alt}
+          className="rounded-full object-cover w-full h-full"
+        />
+      )}
       {online && (
         <span
-          className="absolute bottom-0.5 right-0.5 w-[11px] h-[11px] bg-[#25d366] border-2 border-white rounded-full"
+          className="absolute bottom-0.5 right-0.5 w-2.75 h-2.75 bg-[#25d366] border-2 border-white rounded-full"
           aria-label="Online"
         />
       )}

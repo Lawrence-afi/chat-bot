@@ -124,13 +124,14 @@ const ChatPage = () => {
         setLoading(true);
         setError(null);
 
-        const [messagesRes, publicKeyRes] = await Promise.all([
+        const [messagesRes, publicKeyRes, conversationsRes] = await Promise.all([
           api.get(`/conversations/${recipientId}/messages`, {
             params: {
               limit: 50,
             },
           }),
           api.get(`/users/${recipientId}/public-key`),
+          api.get(`/conversations`),
         ]);
 
         if (!isMounted) return;
@@ -161,7 +162,8 @@ const ChatPage = () => {
 
                   return {
                     id: message.id,
-                    sender: message.from_user_id === currentUserId ? "me" : "other",
+                    sender:
+                      message.from_user_id === currentUserId ? "me" : "other",
                     text: messageText,
                     time: formatTime(message.created_at),
                     payload: message.payload,
@@ -172,6 +174,36 @@ const ChatPage = () => {
 
         setMessages(normalized);
         setRecipientKey(publicKeyRes.data?.public_key ?? null);
+
+        const conversationList = Array.isArray(conversationsRes.data)
+          ? conversationsRes.data
+          : Array.isArray(conversationsRes.data.conversations)
+            ? conversationsRes.data.conversations
+            : [];
+
+        const recipientConversation = conversationList.find(
+          (conversation) =>
+            conversation.user_id === recipientId ||
+            conversation.other_user_id === recipientId ||
+            conversation.participant_id === recipientId ||
+            conversation.target_user_id === recipientId ||
+            conversation.partner_id === recipientId ||
+            conversation.id === recipientId ||
+            conversation.conversation_id === recipientId,
+        );
+
+        if (recipientConversation) {
+          setRecipientName(
+            recipientConversation.display_name ||
+              recipientConversation.name ||
+              recipientConversation.username ||
+              recipientConversation.title ||
+              recipientConversation.subject ||
+              recipientId,
+          );
+        } else {
+          setRecipientName(recipientId);
+        }
       } catch (err) {
         const message = err.response
           ? JSON.stringify(err.response.data)
@@ -223,9 +255,15 @@ const ChatPage = () => {
 
           if (privateKey && data.payload?.ciphertext) {
             try {
-              messageText = await decryptMessagePayload(data.payload, privateKey);
+              messageText = await decryptMessagePayload(
+                data.payload,
+                privateKey,
+              );
             } catch (decryptError) {
-              console.warn("Unable to decrypt incoming WebSocket message:", decryptError);
+              console.warn(
+                "Unable to decrypt incoming WebSocket message:",
+                decryptError,
+              );
             }
           }
 
@@ -247,12 +285,16 @@ const ChatPage = () => {
 
     socket.onerror = () => {
       setWsConnected(false);
-      setWsError("WebSocket unavailable; outgoing messages will use fallback POST.");
+      setWsError(
+        "WebSocket unavailable; outgoing messages will use fallback POST.",
+      );
     };
 
     socket.onclose = () => {
       setWsConnected(false);
-      setWsError("WebSocket unavailable; outgoing messages will use fallback POST.");
+      setWsError(
+        "WebSocket unavailable; outgoing messages will use fallback POST.",
+      );
     };
 
     return () => {
@@ -279,7 +321,10 @@ const ChatPage = () => {
 
       setMessages((prev) => [...prev, localMessage]);
 
-      if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      if (
+        socketRef.current &&
+        socketRef.current.readyState === WebSocket.OPEN
+      ) {
         const event = {
           event: "message.send",
           to: recipientId,
