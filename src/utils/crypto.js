@@ -1,3 +1,81 @@
+const buf2b64 = (buf) => {
+  return btoa(String.fromCharCode(...new Uint8Array(buf)));
+};
+
+const b642buf = (b64) => {
+  return Uint8Array.from(atob(b64), (char) => char.charCodeAt(0));
+};
+
+export async function importRsaPublicKey(publicKeyBase64) {
+  const keyData = b642buf(publicKeyBase64);
+  return crypto.subtle.importKey(
+    "spki",
+    keyData,
+    {
+      name: "RSA-OAEP",
+      hash: "SHA-256",
+    },
+    false,
+    ["encrypt"],
+  );
+}
+
+export async function generateAesKey() {
+  return crypto.subtle.generateKey(
+    {
+      name: "AES-GCM",
+      length: 256,
+    },
+    true,
+    ["encrypt", "decrypt"],
+  );
+}
+
+export async function exportCryptoKeyRaw(key) {
+  return crypto.subtle.exportKey("raw", key);
+}
+
+export async function encryptAesGcm(key, plaintext) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(plaintext);
+  const ciphertext = await crypto.subtle.encrypt(
+    {
+      name: "AES-GCM",
+      iv,
+    },
+    key,
+    encoded,
+  );
+
+  return { ciphertext, iv };
+}
+
+export async function rsaOaepEncrypt(publicKey, data) {
+  return crypto.subtle.encrypt(
+    {
+      name: "RSA-OAEP",
+    },
+    publicKey,
+    data,
+  );
+}
+
+export async function createEncryptedPayload(message, recipientPublicKeyBase64) {
+  const recipientKey = await importRsaPublicKey(recipientPublicKeyBase64);
+  const aesKey = await generateAesKey();
+  const { ciphertext, iv } = await encryptAesGcm(aesKey, message);
+  const rawAesKey = await exportCryptoKeyRaw(aesKey);
+  const encryptedKeyBytes = await rsaOaepEncrypt(recipientKey, rawAesKey);
+  const encryptedKey = buf2b64(encryptedKeyBytes);
+
+  return {
+    ciphertext: buf2b64(ciphertext),
+    iv: buf2b64(iv),
+    encryptedKey,
+    encryptedKeyForSelf: encryptedKey,
+  };
+}
+
 export async function generateKeys(password) {
   const buf2b64 = (buf) => {
     return btoa(String.fromCharCode(...new Uint8Array(buf)));

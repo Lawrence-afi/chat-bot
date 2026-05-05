@@ -6,9 +6,13 @@ import UnreadBadge from "./UnreadBadge";
  * ChatListItem — a single row in the conversation list.
  * Props: chat { id, name, message, time, unread, avatar, online }
  */
-export default function ChatListItem({ chat }) {
+export default function ChatListItem({ chat, onClick }) {
   return (
-    <li className="flex items-center gap-3.5 px-[22px] py-[13px] cursor-pointer border-b border-[#ebebeb] transition-colors duration-75 ease-out hover:bg-[#f5f7fa] active:bg-[#eef0f4] last:border-b-0 animate-[fadeSlideIn_0.3s_ease_both]">
+    <li
+      onClick={onClick}
+      role={onClick ? "button" : undefined}
+      className="flex items-center gap-3.5 px-5.5 py-3.25 cursor-pointer border-b border-[#ebebeb] transition-colors duration-75 ease-out hover:bg-[#f5f7fa] active:bg-[#eef0f4] last:border-b-0 animate-[fadeSlideIn_0.3s_ease_both]"
+    >
       <Avatar
         src={chat.avatar}
         alt={chat.name}

@@ -9,43 +9,42 @@ const useAuthStore = create(
       token_type: null,
       expires_in: null,
       user: null,
+
       hydrated: false,
-      setAuth: (data) =>
-        set(() => ({
+
+      // Set auth data (login/signup)
+      setAuth: (data) => {
+        set({
           access_token: data.access_token,
           refresh_token: data.refresh_token,
           token_type: data.token_type,
           expires_in: data.expires_in,
           user: data.user,
-        })),
-      refreshTokens: ({ access_token, refresh_token, expires_in }) =>
-        set((state) => ({
-          access_token: access_token ?? state.access_token,
-          refresh_token: refresh_token ?? state.refresh_token,
-          expires_in: expires_in ?? state.expires_in,
-        })),
-      logout: () =>
+        });
+      },
+
+      // Logout
+      logout: () => {
         set({
           access_token: null,
           refresh_token: null,
           token_type: null,
           expires_in: null,
           user: null,
-        }),
-      isAuthenticated: () => Boolean(get().access_token),
-      setHydrated: () => set({ hydrated: true }),
+        });
+      },
+
+      // Check if user is logged in
+      isAuthenticated: () => {
+        return !!get().access_token;
+      },
+
+      setHydrated: (state) => set({ hydrated: state }),
     }),
     {
-      name: "wb-auth-storage",
-      storage:
-        typeof window !== "undefined"
-          ? {
-              getItem: (name) => window.localStorage.getItem(name),
-              setItem: (name, value) =>
-                window.localStorage.setItem(name, value),
-              removeItem: (name) => window.localStorage.removeItem(name),
-            }
-          : undefined,
+      name: "auth-storage",
+
+      // Persist only what matters
       partialize: (state) => ({
         access_token: state.access_token,
         refresh_token: state.refresh_token,
@@ -53,8 +52,10 @@ const useAuthStore = create(
         expires_in: state.expires_in,
         user: state.user,
       }),
+
+      // Track hydration (important for SSR / first load)
       onRehydrateStorage: () => (state) => {
-        state?.setHydrated();
+        state?.setHydrated(true);
       },
     },
   ),

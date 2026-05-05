@@ -4,6 +4,8 @@ import SignUpScreen from "./components/auth/SignUpScreen";
 import { Routes, Route } from "react-router-dom";
 import ChatHome from "./pages/ChatHome";
 import ProtectedRoute from "./components/shared/ProtectedRoute";
+import ChatPage from "./pages/Conversation";
+import Search from "./pages/Search"
 
 function App() {
   const [activeScreen, setActiveScreen] = useState("signin");
@@ -18,6 +20,15 @@ function App() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/search"
+        element={
+          <ProtectedRoute>
+            <Search />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/conversation/:id" element={<ChatPage />} />
       <Route path="/signin" element={<SignInScreen />} />
       <Route path="/signup" element={<SignUpScreen />} />
     </Routes>

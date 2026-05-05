@@ -3,15 +3,14 @@ import { Navigate } from "react-router-dom";
 import useAuthStore from "../../store/authStore";
 
 const ProtectedRoute = ({ children }) => {
-  const isAuthenticated = useAuthStore((state) => state.isAuthenticated());
+  const access_token = useAuthStore((state) => state.access_token);
   const hydrated = useAuthStore((state) => state.hydrated);
 
-  // If not hydrated yet, show nothing (or a loading spinner)
   if (!hydrated) {
-    return null; // or <div>Loading...</div>
+    return null;
   }
 
-  if (!isAuthenticated) {
+  if (!access_token) {
     return <Navigate to="/signin" replace />;
   }
 

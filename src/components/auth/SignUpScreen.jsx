@@ -10,8 +10,10 @@ import { useNavigate } from "react-router-dom";
 const SignUpScreen = () => {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+
   const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
+
   const {
     register,
     handleSubmit,
@@ -20,8 +22,8 @@ const SignUpScreen = () => {
   } = useForm({
     mode: "onChange",
     defaultValues: {
-      name: "Nazrul Islam",
-      username: "nazrulmum",
+      name: "",
+      username: "",
       password: "",
       confirmPassword: "",
     },
@@ -32,11 +34,15 @@ const SignUpScreen = () => {
   const onSubmit = async (data) => {
     setErrorMessage(null);
     setLoading(true);
+
     try {
+      // 🔐 Generate E2EE keys
       const secrets = await generateKeys(data.password);
+
       const apiBaseUrl = import.meta.env.DEV
         ? ""
         : "https://whisperbox.koyeb.app";
+
       const res = await axios.post(`${apiBaseUrl}/auth/register`, {
         username: data.username,
         display_name: data.name,
@@ -44,17 +50,33 @@ const SignUpScreen = () => {
         ...secrets,
       });
 
-      setAuth(res.data);
+      const response = res.data;
+
+      // ✅ Defensive validation
+      if (!response.access_token || !response.user) {
+        throw new Error("Invalid signup response structure");
+      }
+
+      // ✅ Store auth properly
+      setAuth({
+        access_token: response.access_token,
+        refresh_token: response.refresh_token,
+        token_type: response.token_type,
+        expires_in: Date.now() + response.expires_in * 1000,
+        user: response.user,
+      });
+
+      console.log("Signup successful:", response.user.username);
 
       navigate("/");
-      console.log("registered successfully", res.data.user);
     } catch (err) {
       const message = err.response
         ? JSON.stringify(err.response.data)
         : err.request
           ? "No response from server. This may be a network or CORS issue."
           : err.message;
-      console.error("register error", message, err.response, err.request);
+
+      console.error("register error", message);
       setErrorMessage(message);
     } finally {
       setLoading(false);
@@ -72,7 +94,6 @@ const SignUpScreen = () => {
 
           <InputField
             label="Your name"
-            defaultValue="Nazrul Islam"
             error={errors.name?.message}
             {...register("name", { required: "Name is required" })}
           />
@@ -80,10 +101,9 @@ const SignUpScreen = () => {
           <InputField
             label="Your username"
             type="text"
-            defaultValue="nazrulmum"
             error={errors.username?.message}
             {...register("username", {
-              required: "username is required",
+              required: "Username is required",
             })}
           />
 
@@ -120,11 +140,12 @@ const SignUpScreen = () => {
           >
             {loading ? "Creating account..." : "Create an account"}
           </button>
-          {errorMessage ? (
-            <p className="mt-4 text-sm text-red-600 wrap-break-word">
+
+          {errorMessage && (
+            <p className="mt-4 text-sm text-red-600 break-words">
               {errorMessage}
             </p>
-          ) : null}
+          )}
         </div>
       </div>
     </div>

@@ -1,7 +1,5 @@
 import React, { useState } from "react";
 import AuthHeader from "./AuthHeader";
-import Divider from "./Divider";
-import SocialButton from "./SocialButton";
 import InputField from "./InputField";
 import { useForm } from "react-hook-form";
 import axios from "axios";
@@ -11,8 +9,10 @@ import { useNavigate } from "react-router-dom";
 const SignInScreen = () => {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
+
   const setAuth = useAuthStore((state) => state.setAuth);
   const navigate = useNavigate();
+
   const {
     register,
     handleSubmit,
@@ -20,7 +20,7 @@ const SignInScreen = () => {
   } = useForm({
     mode: "onChange",
     defaultValues: {
-      username: "nazrulmum",
+      username: "",
       password: "",
     },
   });
@@ -28,26 +28,44 @@ const SignInScreen = () => {
   const onSubmit = async (data) => {
     setErrorMessage(null);
     setLoading(true);
+
     try {
       const apiBaseUrl = import.meta.env.DEV
         ? ""
         : "https://whisperbox.koyeb.app";
+
       const res = await axios.post(`${apiBaseUrl}/auth/login`, {
         username: data.username,
         password: data.password,
       });
 
-      setAuth(res.data);
+      const response = res.data;
+
+      // ✅ Validate expected structure (defensive programming)
+      if (!response.access_token || !response.user) {
+        throw new Error("Invalid login response structure");
+      }
+
+      // ✅ Store auth correctly
+      setAuth({
+        access_token: response.access_token,
+        refresh_token: response.refresh_token,
+        token_type: response.token_type,
+        expires_in: Date.now() + response.expires_in * 1000,
+        user: response.user,
+      });
+
+      console.log("Login successful:", response.user.username);
 
       navigate("/");
-      console.log("logged in successfully", res.data.user);
     } catch (err) {
       const message = err.response
         ? JSON.stringify(err.response.data)
         : err.request
           ? "No response from server. This may be a network or CORS issue."
           : err.message;
-      console.error("login error", message, err.response, err.request);
+
+      console.error("login error", message);
       setErrorMessage(message);
     } finally {
       setLoading(false);
@@ -56,16 +74,12 @@ const SignInScreen = () => {
 
   return (
     <div className="min-h-screen bg-[#F3F6F6] flex items-center justify-center p-4">
-      <div className="w-full max-w-95 bg-white  overflow-hidden border border-gray-100">
-        {/* Status Bar */}
-
+      <div className="w-full max-w-95 bg-white overflow-hidden border border-gray-100">
         <div className="p-8 pt-10">
           <AuthHeader
             title="Log in to Chatbox"
-            subtitle="Welcome back! Sign in using your social account or email to continue us"
+            subtitle="Welcome back! Sign in to continue"
           />
-
-          {/* <Divider /> */}
 
           <InputField
             label="Your username"
@@ -91,11 +105,12 @@ const SignInScreen = () => {
           >
             {loading ? "Signing in..." : "Log in"}
           </button>
-          {errorMessage ? (
-            <p className="mt-4 text-sm text-red-600 wrap-break-word">
+
+          {errorMessage && (
+            <p className="mt-4 text-sm text-red-600 break-words">
               {errorMessage}
             </p>
-          ) : null}
+          )}
 
           <div className="text-center mt-6">
             <a
